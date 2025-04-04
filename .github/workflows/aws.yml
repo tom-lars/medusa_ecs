@@ -10,33 +10,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the code (if needed for other operations, e.g., infrastructure setup)
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1  # Replace with your region if different
+          aws-region: us-east-1  # Replace with your region
 
-      # Step 3: Login to Docker Hub (optional but good practice if the image is private)
-      - name: Docker Login
+      - name: Login to Docker Hub
         run: |
           docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
 
-      # Step 4: Pull the image from Docker Hub
       - name: Pull Docker image from Docker Hub
         run: |
           docker pull hemanth42079/secure-patient-system:latest  # Replace with your image name
 
-      # Step 5: Deploy the pulled image to ECS
       - name: Update ECS service to deploy the new image
         run: |
           aws ecs update-service \
-            --cluster your-cluster-name \
+            --cluster medusa-cluster \
             --service your-service-name \
             --force-new-deployment \
             --region us-east-1  # Replace with your region
