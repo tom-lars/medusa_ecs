@@ -3,7 +3,7 @@ name: Deploy to ECS from Docker Hub
 on:
   push:
     branches:
-      - main  # Trigger the action on push to the main branch
+      - main
 
 jobs:
   deploy:
@@ -18,7 +18,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1  # Replace with your region
+          aws-region: us-east-1
 
       - name: Login to Docker Hub
         run: |
@@ -32,6 +32,6 @@ jobs:
         run: |
           aws ecs update-service \
             --cluster medusa-cluster \
-            --service your-service-name \
+            --service medusa-service \  # Make sure to use the correct ECS service name
             --force-new-deployment \
-            --region us-east-1  # Replace with your region
+            --region us-east-1
