@@ -2,36 +2,47 @@ name: Deploy to ECS
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main  # Trigger the action on push to the main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout the code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Step 2: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: us-east-1  # Replace with your region if different
 
+      # Step 3: Login to Amazon ECR
       - name: Login to ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, tag, and push image to ECR
+      # Step 4: Build Docker image and push to ECR
+      - name: Build, tag, and push Docker image to ECR
         run: |
-          docker build -t medusa-backend .
-          docker tag medusa-backend:latest ${{ steps.login-ecr.outputs.registry }}/medusa-backend:latest
-          docker push ${{ steps.login-ecr.outputs.registry }}/medusa-backend:latest
+          # Build the Docker image
+          docker build -t secure-patient-system .
+          # Tag the Docker image for ECR
+          docker tag secure-patient-system:latest ${{ steps.login-ecr.outputs.registry }}/secure-patient-system:latest
+          # Push the image to ECR
+          docker push ${{ steps.login-ecr.outputs.registry }}/secure-patient-system:latest
 
+      # Step 5: Deploy to ECS
       - name: Deploy to ECS
         run: |
+          # Update the ECS service to deploy the new image
           aws ecs update-service \
-            --cluster medusa-cluster \
-            --service medusa-service \
-            --force-new-deployment
+            --cluster your-cluster-name \
+            --service your-service-name \
+            --force-new-deployment \
+            --region us-east-1  # Replace with your region
