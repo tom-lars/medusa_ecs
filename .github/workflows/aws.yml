@@ -1,4 +1,4 @@
-name: Deploy to ECS
+name: Deploy to ECS from Docker Hub
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the code
+      # Step 1: Checkout the code (if needed for other operations, e.g., infrastructure setup)
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -22,25 +22,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1  # Replace with your region if different
 
-      # Step 3: Login to Amazon ECR
-      - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      # Step 4: Build Docker image and push to ECR
-      - name: Build, tag, and push Docker image to ECR
+      # Step 3: Login to Docker Hub (optional but good practice if the image is private)
+      - name: Docker Login
         run: |
-          # Build the Docker image
-          docker build -t secure-patient-system .
-          # Tag the Docker image for ECR
-          docker tag secure-patient-system:latest ${{ steps.login-ecr.outputs.registry }}/secure-patient-system:latest
-          # Push the image to ECR
-          docker push ${{ steps.login-ecr.outputs.registry }}/secure-patient-system:latest
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
 
-      # Step 5: Deploy to ECS
-      - name: Deploy to ECS
+      # Step 4: Pull the image from Docker Hub
+      - name: Pull Docker image from Docker Hub
         run: |
-          # Update the ECS service to deploy the new image
+          docker pull hemanth42079/secure-patient-system:latest  # Replace with your image name
+
+      # Step 5: Deploy the pulled image to ECS
+      - name: Update ECS service to deploy the new image
+        run: |
           aws ecs update-service \
             --cluster your-cluster-name \
             --service your-service-name \
