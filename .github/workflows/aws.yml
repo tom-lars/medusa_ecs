@@ -32,8 +32,8 @@ jobs:
       # Pull the Docker image from Docker Hub
       - name: Pull Docker image from Docker Hub
         run: |
-          docker pull hemanth42079/secure-patient-system:latest
-          echo "Pulled image: hemanth42079/secure-patient-system:latest"
+          docker pull hemanth42079/medusa-store:latestt
+          echo "Pulled image: hemanth42079/medusa-store:latest
 
       # Register a new task definition with the latest image
       - name: Update ECS task definition
