@@ -1,4 +1,4 @@
-name: CI/CD to ECS from GitHub
+name: Deploy Medusa Store to AWS ECS
 
 on:
   push:
@@ -6,32 +6,36 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository code
-      - name: Checkout code
+      # Step 1: Checkout the code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Set up Docker Buildx
+      # Step 2: Set up Docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Login to Docker Hub
-      - name: Login to Docker Hub
+      # Step 3: Log in to Docker Hub
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build Docker image and push to Docker Hub
-      - name: Build and push Docker image
+      # Step 4: Build the Docker image
+      - name: Build Docker image
         run: |
           docker build -t hemanth42079/medusa-store:latest .
+
+      # Step 5: Push Docker image to Docker Hub
+      - name: Push Docker image to Docker Hub
+        run: |
           docker push hemanth42079/medusa-store:latest
 
-      # Configure AWS credentials
+      # Step 6: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -39,7 +43,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # Update ECS task definition with the new image
+      # Step 7: Pull Docker image (for ECS)
+      - name: Pull Docker image from Docker Hub
+        run: |
+          docker pull hemanth42079/medusa-store:latest
+          echo "Pulled image: hemanth42079/medusa-store:latest"
+
+      # Step 8: Update ECS task definition
       - name: Update ECS task definition
         id: update-task-def
         run: |
@@ -57,10 +67,9 @@ jobs:
             --cli-input-json "$NEW_TASK_DEF" \
             | jq -r '.taskDefinition.taskDefinitionArn')
 
-          echo "New task definition ARN: $NEW_TASK_DEF_ARN"
           echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
-      # Deploy updated task to ECS service
+      # Step 9: Update ECS service
       - name: Update ECS service
         run: |
           aws ecs update-service \
@@ -69,11 +78,13 @@ jobs:
             --task-definition ${{ steps.update-task-def.outputs.task_definition_arn }} \
             --force-new-deployment \
             --region us-east-1
+          echo "Updated ECS service"
 
-      # Wait for ECS service to stabilize
-      - name: Wait for ECS service stability
+      # Step 10: Wait for ECS service to stabilize
+      - name: Wait for ECS service to stabilize
         run: |
           aws ecs wait services-stable \
             --cluster medusa-cluster \
             --services medusa-service \
             --region us-east-1
+          echo "ECS service is now stable"
