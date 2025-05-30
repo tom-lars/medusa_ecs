@@ -1,229 +1,161 @@
+`markdown
+# Medusa Backend on AWS ECS
+
+This repository contains the source and infrastructure setup to deploy the **Medusa.js** headless commerce backend on **AWS ECS Fargate** with a PostgreSQL database on **AWS RDS**. The app is containerized with Docker and automated deployment is configured via GitHub Actions.
 
 ---
 
-## 🚀 Deploying Medusa Backend on AWS ECS with Terraform, RDS & GitHub Actions
+## Table of Contents
 
-### 👨‍💻 Overview
-
-This project demonstrates the complete Infrastructure-as-Code (IaC) setup and CI/CD pipeline to deploy the **[Medusa.js](https://docs.medusajs.com)** headless commerce backend on **AWS ECS using Fargate**, with **PostgreSQL via RDS Aurora**, **Docker image on Docker Hub**, and **CI/CD via GitHub Actions**.
-
----
-
-## 🔧 Prerequisites
-
-- AWS Account
-- GitHub Account
-- Docker Hub Account
-- Terraform Installed
-- Docker Installed
-- Git Installed
+- [Getting Started Locally](#getting-started-locally)  
+- [Environment Variables](#environment-variables)  
+- [Docker](#docker)  
+- [Deploying to AWS ECS](#deploying-to-aws-ecs)  
+- [Common Issues & Troubleshooting](#common-issues--troubleshooting)  
+- [Useful Commands](#useful-commands)  
 
 ---
 
-## 🌐 Step 1: AWS Setup
+## Getting Started Locally
 
-1. **Create IAM User**  
-   - Enable programmatic access  
-   - Attach policies:
-     - `AmazonEC2ContainerServiceFullAccess`
-     - `AmazonRDSFullAccess`
-     - `IAMFullAccess`
-     - `AmazonECS_FullAccess`
+1. **Clone the repo**
 
-2. **Note** your `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` — we'll use them in GitHub Actions.
+bash
+git clone https://github.com/tom-lars/medusa-ecs.git
+cd medusa-ecs
+`
 
----
+2. **Install dependencies**
 
-## 📦 Step 2: Terraform Infrastructure (IaC)
+Make sure you have Node.js installed (recommended v18+).
 
-**File: `main.tf`**
-```hcl
-provider "aws" {
-  region = "us-east-1"
-}
+bash
+npm install
 
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-}
 
-resource "aws_subnet" "subnet1" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.1.0/24"
-  availability_zone = "us-east-1a"
-}
+3. **Set up environment variables**
 
-resource "aws_security_group" "ecs_sg" {
-  name        = "ecs_sg"
-  description = "Allow inbound"
-  vpc_id      = aws_vpc.main.id
+Copy the example env file:
 
-  ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+bash
+cp .env.example .env
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
 
-resource "aws_ecs_cluster" "medusa_cluster" {
-  name = "medusa-cluster"
-}
+Update `.env` with your local or remote PostgreSQL connection string and other secrets.
 
-# Add RDS PostgreSQL Aurora
-resource "aws_rds_cluster" "medusa_db" {
-  cluster_identifier = "medusa-db"
-  engine             = "aurora-postgresql"
-  master_username    = "admin"
-  master_password    = "yourpassword"
-  skip_final_snapshot = true
-  vpc_security_group_ids = [aws_security_group.ecs_sg.id]
-}
+4. **Run migrations**
 
-output "db_endpoint" {
-  value = aws_rds_cluster.medusa_db.endpoint
-}
-```
+bash
+npx medusa db:migrate
+
+
+5. **Start development server**
+
+bash
+npm run start
+
+
+The backend will run on `http://localhost:9000`
 
 ---
 
-## 🐳 Step 3: Docker Setup
+## Environment Variables
 
-**File: `Dockerfile`**
-```Dockerfile
-FROM node:18-alpine
+At minimum, configure:
 
-WORKDIR /app
+env
+DATABASE_URL=postgres://username:password@host:5432/medusa
+JWT_SECRET=<your-secure-random-string>
+REDIS_URL=redis://localhost:6379
 
-COPY . .
 
-RUN npm install
-
-EXPOSE 9000
-
-CMD ["npm", "run", "start"]
-```
-
-**File: `.env`**
-```env
-DATABASE_URL=postgres://admin:yourpassword@<REPLACE_WITH_RDS_ENDPOINT>:5432/medusa
-```
-
-**File: `docker-compose.yml`**
-```yaml
-version: "3.9"
-services:
-  medusa:
-    build: .
-    ports:
-      - "9000:9000"
-    env_file:
-      - .env
-```
+Adjust for your database, Redis, and secrets.
 
 ---
 
-## 🔁 Step 4: GitHub Actions CI/CD
+## Docker
 
-**File: `.github/workflows/deploy.yml`**
-```yaml
-name: Deploy to ECS
+A Dockerfile is provided to build the Medusa backend image.
 
-on:
-  push:
-    branches: [main]
+To build and run locally:
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+bash
+docker build -t medusa-backend .
+docker run -p 9000:9000 --env-file .env medusa-backend
 
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
 
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+Alternatively, use `docker-compose.yml` (if provided):
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v2
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+bash
+docker-compose up
 
-    - name: Build and Push Docker Image
-      run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/medusa-backend .
-        docker push ${{ secrets.DOCKER_USERNAME }}/medusa-backend
-
-    - name: Deploy to ECS (Optional Step - if using ECS CLI or custom script)
-      run: echo "Deploying image to ECS using AWS CLI or Terraform"
-```
 
 ---
 
-## 🔐 Step 5: Add Secrets to GitHub
+## Deploying to AWS ECS
 
-Go to your GitHub Repo → `Settings > Secrets and variables > Actions` and add:
+* Infrastructure (VPC, ECS Cluster, RDS) is managed with Terraform scripts in `/terraform`.
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `DOCKER_USERNAME`
-- `DOCKER_PASSWORD`
+* GitHub Actions workflow automates:
 
----
+  * Docker image build & push to Docker Hub
+  * Deployment updates to ECS service
 
-## 🚀 Step 6: Run It All
+* Ensure your GitHub secrets contain:
 
-1. Initialize Terraform:
-```bash
-terraform init
-terraform apply
-```
+  * `AWS_ACCESS_KEY_ID`
+  * `AWS_SECRET_ACCESS_KEY`
+  * `DOCKER_USERNAME`
+  * `DOCKER_PASSWORD`
 
-2. Get the RDS Endpoint from output and update `.env`
-
-3. Build and Push Docker image:
-```bash
-docker build -t yourdockeruser/medusa-backend .
-docker push yourdockeruser/medusa-backend
-```
-
-4. Push code to GitHub `main` branch → GitHub Actions takes over and deploys.
+* Terraform outputs provide RDS endpoints — update your `.env` with the correct `DATABASE_URL`.
 
 ---
 
-## ✅ Final Result
+## Common Issues & Troubleshooting
 
-- ECS Service running Medusa backend
-- PostgreSQL RDS Aurora connected
-- CI/CD with GitHub Actions
-- Docker image hosted on Docker Hub
-- Live, scalable, serverless deployment 🎉
+* **Health checks failing on ECS tasks**
+  Verify your ECS task container listens on the same port as your ALB target group health check path & port (usually port 9000 and `/`).
 
----
+* **Database connection errors**
+  Make sure your RDS security groups allow inbound traffic from your ECS subnets. Check username/password and `DATABASE_URL`.
 
-## 🎥 Video
+* **Missing JWT\_SECRET**
+  Medusa requires a JWT secret for authentication — generate one securely.
 
-> 🔗 **[Insert YouTube Video Link Here]**  
-> In this video, I walk through everything — including my face and live output. Check it out!
+* **Redis connection errors**
+  If using Redis, ensure it's running and accessible from your app (update `REDIS_URL`).
 
----
-
-## 🔗 GitHub Repo
-
-> 🔗 **[Insert Public GitHub Repo Link Here]**  
-> Feel free to fork or star it! Contributions welcome.
+* **Task keeps restarting**
+  Check ECS task logs (CloudWatch) for runtime errors or missing dependencies.
 
 ---
 
-Let me know if you want this zipped or converted to a GitHub repo directly. Want me to build this out with real Terraform modules and ECS Task definitions too?
+## Useful Commands
+
+* Run local Medusa server:
+
+  bash
+  npm run start
+  
+
+* Run migrations:
+
+  bash
+  npx medusa db:migrate
+  
+
+* Build Docker image:
+
+  bash
+  docker build -t medusa-backend .
+  
+
+* Run Docker container locally:
+
+  bash
+  docker run -p 9000:9000 --env-file .env medusa-backend
+  
+
+---
+
