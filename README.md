@@ -1,4 +1,3 @@
-`markdown
 # Medusa Backend on AWS ECS
 
 This repository contains the source and infrastructure setup to deploy the **Medusa.js** headless commerce backend on **AWS ECS Fargate** with a PostgreSQL database on **AWS RDS**. The app is containerized with Docker and automated deployment is configured via GitHub Actions.
