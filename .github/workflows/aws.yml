@@ -10,81 +10,63 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 3: Log in to Docker Hub
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Step 4: Build the Docker image
-      - name: Build Docker image
+      - name: Get latest numeric tag from Docker Hub
+        id: get_tag
         run: |
-          docker build -t hemanth42079/medusa-store:latest .
+          IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/medusa-backend"
+          TAGS=$(curl -s https://hub.docker.com/v2/repositories/${{ secrets.DOCKERHUB_USERNAME }}/medusa-backend/tags?page_size=100 | jq -r '.results[].name' | grep -E '^[0-9]+$' || echo "0")
+          LATEST=$(echo "$TAGS" | sort -n | tail -n 1)
+          NEXT=$((LATEST + 1))
+          echo "next_tag=$NEXT" >> $GITHUB_OUTPUT
 
-      # Step 5: Push Docker image to Docker Hub
-      - name: Push Docker image to Docker Hub
+      - name: Build and tag Docker image
         run: |
-          docker push hemanth42079/medusa-store:latest
+          IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/medusa-backend"
+          docker build -t $IMAGE_NAME:${{ steps.get_tag.outputs.next_tag }} -t $IMAGE_NAME:latest .
 
-      # Step 6: Configure AWS credentials
+      - name: Push Docker images to Docker Hub
+        run: |
+          IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/medusa-backend"
+          docker push $IMAGE_NAME:${{ steps.get_tag.outputs.next_tag }}
+          docker push $IMAGE_NAME:latest
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ap-south-1
 
-      # Step 7: Pull Docker image (for ECS)
-      - name: Pull Docker image from Docker Hub
-        run: |
-          docker pull hemanth42079/medusa-store:latest
-          echo "Pulled image: hemanth42079/medusa-store:latest"
-
-      # Step 8: Update ECS task definition
       - name: Update ECS task definition
         id: update-task-def
         run: |
-          TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition medusa-task \
-            --region us-east-1)
+          TASK_DEF=$(aws ecs describe-task-definition --task-definition medusa-task --region ap-south-1)
 
           NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
             '.taskDefinition |
-            .containerDefinitions[0].image = "hemanth42079/medusa-store:latest" |
+            .containerDefinitions[0].image = "'${{ secrets.DOCKERHUB_USERNAME }}/medusa-backend:latest'" |
             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
 
-          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
-            --region us-east-1 \
-            --cli-input-json "$NEW_TASK_DEF" \
-            | jq -r '.taskDefinition.taskDefinitionArn')
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition --region ap-south-1 --cli-input-json "$NEW_TASK_DEF" | jq -r '.taskDefinition.taskDefinitionArn')
 
           echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
-      # Step 9: Update ECS service
       - name: Update ECS service
         run: |
-          aws ecs update-service \
-            --cluster medusa-cluster \
-            --service medusa-service \
-            --task-definition ${{ steps.update-task-def.outputs.task_definition_arn }} \
-            --force-new-deployment \
-            --region us-east-1
-          echo "Updated ECS service"
+          aws ecs update-service --cluster medusa-cluster --service medusa-service --task-definition ${{ steps.update-task-def.outputs.task_definition_arn }} --force-new-deployment --region ap-south-1
 
-      # Step 10: Wait for ECS service to stabilize
       - name: Wait for ECS service to stabilize
         run: |
-          aws ecs wait services-stable \
-            --cluster medusa-cluster \
-            --services medusa-service \
-            --region us-east-1
-          echo "ECS service is now stable"
+          aws ecs wait services-stable --cluster medusa-cluster --services medusa-service --region ap-south-1
